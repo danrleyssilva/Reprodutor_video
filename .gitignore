@@ -13,3 +13,14 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+gitignore
+# Ignora toda a pasta .idea
+.idea/
+
+# Mas NÃO ignora (re-inclui) os arquivos seguros para compartilhamento
+!.idea/gradle.xml
+!.idea/misc.xml
+!.idea/vcs.xml
+
+

@@ -1,12 +1,17 @@
 package com.player.reprodutor_video;
 
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.text.InputType;
 import android.util.Log;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -18,16 +23,20 @@ import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.ui.PlayerView;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final Logger log = LoggerFactory.getLogger(MainActivity.class);
     private PlayerView playerView;
     private ExoPlayer player;
     private ProgressBar progressBar;
@@ -36,14 +45,20 @@ public class MainActivity extends AppCompatActivity {
     private Handler handler = new Handler();
     private Runnable sendProgressRunnable;
     private String currentVideoUrl = "";
+    private String deviceId = "";
+    private boolean isMaster = false;
 
-//         private static final String API_URL = "http://10.0.2.2/api_reprodutor/get_video.php?codigo=disp_01";
-    private static final String API_URL = "http://192.168.0.112/api_reprodutor/get_video.php?codigo=disp_02T";
-    //    private static final String API_URL = "http://192.168.0.112/api_reprodutor/get_video.php?codigo=disp_03T";
-    private static final String WEBSOCKET_URL = "ws://192.168.0.112:8080";
+
+//      private static final String API_URL = "http://10.0.2.2/api_reprodutor/get_video.php?codigo=disp_01";
+//    private static final String API_URL = "http://192.168.0.106/api_reprodutor/get_video.php?codigo=disp_02T";
+//    private static final String API_URL = "http://192.168.0.106/api_reprodutor/get_video.php?codigo=disp_03T";
+
+    private static final String WEBSOCKET_URL = "ws://192.168.0.106:8080";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -55,34 +70,42 @@ public class MainActivity extends AppCompatActivity {
 
         RequestQueue queue = Volley.newRequestQueue(this);
 
-        JsonObjectRequest request = new JsonObjectRequest(
-                Request.Method.GET,
-                API_URL,
-                null,
-                response -> {
-                    try {
-                        String videoUrl = response.getString("url");
-                        String grupo = response.getString("grupo");
+        FloatingActionButton btnSetId = findViewById(R.id.BtnSetDevice);
+        btnSetId.setOnClickListener(view -> {
+            final EditText input = new EditText(MainActivity.this);
+            input.setInputType(InputType.TYPE_CLASS_TEXT);
+            input.setHint("Digite o identificador do dispositivo");
 
-                        tvUrl.setText("URL retornada: " + videoUrl + " | Grupo: " + grupo);
+            // Preenche o EditText com o valor já salvo, se existir
+            String savedId = loadDeviceId();
+            if (!savedId.isEmpty()) {
+                input.setText(savedId);
+            }
 
-                        setupExoPlayer(videoUrl, grupo);
-                        connectWebSocket(videoUrl, grupo);
+            new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("Dispositivo")
+                    .setView(input)
+                    .setPositiveButton("OK", (dialog, which) -> {
+                        deviceId = input.getText().toString();
+                        saveDeviceId(deviceId);
+                        Toast.makeText(MainActivity.this, "Dispositivo salvo: " + deviceId, Toast.LENGTH_SHORT).show();
 
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        progressBar.setVisibility(View.GONE);
-                        tvUrl.setText("Erro ao processar JSON");
-                    }
-                },
-                error -> {
-                    error.printStackTrace();
-                    progressBar.setVisibility(View.GONE);
-                    tvUrl.setText("Erro ao acessar API");
-                }
-        );
+                        // Aqui você pode montar a URL da API e chamar a requisição novamente
+                        requestVideo(deviceId);
+                    })
+                    .setNegativeButton("Cancelar", null)
+                    .show();
+        });
 
-        queue.add(request);
+
+        deviceId = loadDeviceId();
+        if (!deviceId.isEmpty()) {
+            requestVideo(deviceId);
+        } else {
+            btnSetId.performClick();
+        }
+
+//        queue.add(request);
     }
 
     private void setupExoPlayer(String videoUrl, String grupo) {
@@ -113,6 +136,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startSendingProgress(String grupo) {
+        if (!isMaster) return; // só master envia
+
         sendProgressRunnable = new Runnable() {
             @Override
             public void run() {
@@ -123,7 +148,7 @@ public class MainActivity extends AppCompatActivity {
                         long duration = player.getDuration();
                         progress.put("command", "progress");
                         progress.put("position", player.getCurrentPosition());
-                        if(duration == com.google.android.exoplayer2.C.TIME_UNSET){
+                        if (duration == com.google.android.exoplayer2.C.TIME_UNSET) {
                             duration = 0;
                         }
                         progress.put("duration", duration);
@@ -170,7 +195,22 @@ public class MainActivity extends AppCompatActivity {
                             if ("play".equals(action)) {
                                 handlePlay(json);
                             } else if ("sync".equals(action)) {
-                                handleSync(json);
+//                                handleSync(json);
+                            } else if ("reloadAll".equals(action)) {
+                                Log.d("StartAll", "reiniciar os vídeos do grupo");
+                                if (player != null) {
+                                    player.seekTo(0);
+                                    player.setPlayWhenReady(true);
+                                }
+                            } else if ("setMaster".equals(action)) {
+                                isMaster = json.optBoolean("status", false);
+                                if (isMaster) {
+                                    Toast.makeText(MainActivity.this, "Você agora é MASTER do grupo!", Toast.LENGTH_SHORT).show();
+                                    startSendingProgress(grupo); // inicia envio de progress
+                                } else {
+                                    // se perdeu status de master
+                                    handler.removeCallbacks(sendProgressRunnable);
+                                }
                             }
 
                         } catch (JSONException e) {
@@ -250,6 +290,66 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         if (player != null) player.release();
         if (webSocketClient != null) webSocketClient.close();
-        if (handler != null && sendProgressRunnable != null) handler.removeCallbacks(sendProgressRunnable);
+        if (handler != null && sendProgressRunnable != null)
+            handler.removeCallbacks(sendProgressRunnable);
     }
+
+    private void saveDeviceId(String id) {
+        getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .edit()
+                .putString("device_id", id)
+                .apply();
+    }
+
+    private String loadDeviceId() {
+        return getSharedPreferences("app_prefs", MODE_PRIVATE)
+                .getString("device_id", "");
+    }
+
+    private void requestVideo(String deviceId) {
+        String apiUrl = "http://192.168.0.106/api_reprodutor/get_video.php?codigo=" + deviceId;
+        progressBar.setVisibility(View.VISIBLE);
+
+        RequestQueue queue = Volley.newRequestQueue(this);
+        JsonObjectRequest request = new JsonObjectRequest(
+                Request.Method.GET,
+                apiUrl,
+                null,
+                response -> {
+                    try {
+                        String videoUrl = response.getString("url");
+                        String grupo = response.getString("grupo");
+
+                        tvUrl.setText("URL retornada: " + videoUrl + " | Grupo: " + grupo);
+
+                        setupExoPlayer(videoUrl, grupo);
+                        connectWebSocket(videoUrl, grupo);
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        progressBar.setVisibility(View.GONE);
+                        tvUrl.setText("Erro ao processar JSON");
+                    }
+                },
+                error -> {
+                    error.printStackTrace();
+                    progressBar.setVisibility(View.GONE);
+                    tvUrl.setText("Erro ao acessar API");
+                }
+        );
+        queue.add(request);
+    }
+
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+
+        FloatingActionButton btnSetId = findViewById(R.id.BtnSetDevice);
+        if (btnSetId.getVisibility() != View.VISIBLE) {
+            btnSetId.setVisibility(View.VISIBLE);
+
+            new Handler().postDelayed(() -> btnSetId.setVisibility(View.GONE), 5000);
+        }
+    }
+
 }
