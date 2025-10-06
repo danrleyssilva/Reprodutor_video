@@ -312,6 +312,14 @@ public class MainActivity extends AppCompatActivity {
         RequestQueue queue = Volley.newRequestQueue(this);
         JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, apiUrl, null, response -> {
             try {
+
+                if (response.has("error")) {
+                    String errorMsg = response.getString("error");
+                    Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show();
+                    progressBar.setVisibility(View.GONE);
+                    return;
+                }
+
                 ip_ws = response.getString("ip_ws");
                 WEBSOCKET_URL = "ws://" + ip_ws + ":8080";
 
