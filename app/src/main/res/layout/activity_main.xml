@@ -28,7 +28,8 @@
                 android:textColor="#FFFFFF"
                 android:textSize="20sp"
                 android:layout_alignParentStart="true"
-                android:layout_centerVertical="true" />
+                android:layout_centerVertical="true"
+                android:visibility="invisible"/>
 
             <com.google.android.material.floatingactionbutton.FloatingActionButton
                 android:id="@+id/BtnSetDevice"

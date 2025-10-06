@@ -8,10 +8,13 @@ import android.os.Handler;
 import android.text.InputType;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.Intent;
+
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -27,6 +30,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -47,17 +51,17 @@ public class MainActivity extends AppCompatActivity {
     private String currentVideoUrl = "";
     private String deviceId = "";
     private boolean isMaster = false;
+    private String ip_ws = "";
+    private String WEBSOCKET_URL = "";
+    private String url_base_acess = "http://192.168.1.167/api_reprodutor/get_video.php?codigo=";
 
-
-//      private static final String API_URL = "http://10.0.2.2/api_reprodutor/get_video.php?codigo=disp_01";
-//    private static final String API_URL = "http://192.168.0.106/api_reprodutor/get_video.php?codigo=disp_02T";
-//    private static final String API_URL = "http://192.168.0.106/api_reprodutor/get_video.php?codigo=disp_03T";
-
-    private static final String WEBSOCKET_URL = "ws://192.168.0.106:8080";
+    // private static final String API_URL = "http://10.0.2.2/api_reprodutor/get_video.php?codigo=disp_01";
+    // private static final String API_URL = "http://192.168.0.106/api_reprodutor/get_video.php?codigo=disp_02T";
+    // private static final String API_URL = "http://192.168.0.106/api_reprodutor/get_video.php?codigo=disp_03T";
+    // private static final String WEBSOCKET_URL = "ws://10.20.70.90:8080";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
 
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -67,7 +71,6 @@ public class MainActivity extends AppCompatActivity {
         tvUrl = findViewById(R.id.tvUrl);
 
         progressBar.setVisibility(View.VISIBLE);
-
         RequestQueue queue = Volley.newRequestQueue(this);
 
         FloatingActionButton btnSetId = findViewById(R.id.BtnSetDevice);
@@ -82,19 +85,13 @@ public class MainActivity extends AppCompatActivity {
                 input.setText(savedId);
             }
 
-            new AlertDialog.Builder(MainActivity.this)
-                    .setTitle("Dispositivo")
-                    .setView(input)
-                    .setPositiveButton("OK", (dialog, which) -> {
-                        deviceId = input.getText().toString();
-                        saveDeviceId(deviceId);
-                        Toast.makeText(MainActivity.this, "Dispositivo salvo: " + deviceId, Toast.LENGTH_SHORT).show();
+            new AlertDialog.Builder(MainActivity.this).setTitle("Dispositivo").setView(input).setPositiveButton("OK", (dialog, which) -> {
+                deviceId = input.getText().toString();
+                saveDeviceId(deviceId);
+                Toast.makeText(MainActivity.this, "Dispositivo salvo: " + deviceId, Toast.LENGTH_SHORT).show();
 
-                        // Aqui você pode montar a URL da API e chamar a requisição novamente
-                        requestVideo(deviceId);
-                    })
-                    .setNegativeButton("Cancelar", null)
-                    .show();
+                requestVideo(deviceId);
+            }).setNegativeButton("Cancelar", null).show();
         });
 
 
@@ -105,7 +102,11 @@ public class MainActivity extends AppCompatActivity {
             btnSetId.performClick();
         }
 
-//        queue.add(request);
+        getWindow().setFlags(
+                WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN
+        );
+
     }
 
     private void setupExoPlayer(String videoUrl, String grupo) {
@@ -199,13 +200,17 @@ public class MainActivity extends AppCompatActivity {
                             } else if ("reloadAll".equals(action)) {
                                 Log.d("StartAll", "reiniciar os vídeos do grupo");
                                 if (player != null) {
-                                    player.seekTo(0);
+                                    player.seekTo(0, 0);
                                     player.setPlayWhenReady(true);
                                 }
+                            } else if ("updatePlaylist".equals(action)) {
+//                                requestVideo(deviceId);
+                                runOnUiThread(() -> restartApp());
+
                             } else if ("setMaster".equals(action)) {
                                 isMaster = json.optBoolean("status", false);
                                 if (isMaster) {
-                                    Toast.makeText(MainActivity.this, "Você agora é MASTER do grupo!", Toast.LENGTH_SHORT).show();
+//                                    Toast.makeText(MainActivity.this, "Você agora é MASTER do grupo!", Toast.LENGTH_SHORT).show();
                                     startSendingProgress(grupo); // inicia envio de progress
                                 } else {
                                     // se perdeu status de master
@@ -258,7 +263,6 @@ public class MainActivity extends AppCompatActivity {
 
         playerView.setControllerShowTimeoutMs(0); // 0 = nunca esconder
 
-
     }
 
     private void handleSync(JSONObject json) throws JSONException {
@@ -281,8 +285,7 @@ public class MainActivity extends AppCompatActivity {
             player.setPlayWhenReady(true);
         }
 
-        playerView.setControllerShowTimeoutMs(0); // 0 = nunca esconder
-
+        //  playerView.setControllerShowTimeoutMs(0); // 0 = nunca esconder
     }
 
     @Override
@@ -295,48 +298,79 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void saveDeviceId(String id) {
-        getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .edit()
-                .putString("device_id", id)
-                .apply();
+        getSharedPreferences("app_prefs", MODE_PRIVATE).edit().putString("device_id", id).apply();
     }
 
     private String loadDeviceId() {
-        return getSharedPreferences("app_prefs", MODE_PRIVATE)
-                .getString("device_id", "");
+        return getSharedPreferences("app_prefs", MODE_PRIVATE).getString("device_id", "");
     }
 
     private void requestVideo(String deviceId) {
-        String apiUrl = "http://192.168.0.106/api_reprodutor/get_video.php?codigo=" + deviceId;
+        String apiUrl = url_base_acess + deviceId;
         progressBar.setVisibility(View.VISIBLE);
 
         RequestQueue queue = Volley.newRequestQueue(this);
-        JsonObjectRequest request = new JsonObjectRequest(
-                Request.Method.GET,
-                apiUrl,
-                null,
-                response -> {
-                    try {
-                        String videoUrl = response.getString("url");
-                        String grupo = response.getString("grupo");
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, apiUrl, null, response -> {
+            try {
+                ip_ws = response.getString("ip_ws");
+                WEBSOCKET_URL = "ws://" + ip_ws + ":8080";
 
-                        tvUrl.setText("URL retornada: " + videoUrl + " | Grupo: " + grupo);
-
-                        setupExoPlayer(videoUrl, grupo);
-                        connectWebSocket(videoUrl, grupo);
-
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        progressBar.setVisibility(View.GONE);
-                        tvUrl.setText("Erro ao processar JSON");
-                    }
-                },
-                error -> {
-                    error.printStackTrace();
+                JSONArray videosArray = response.getJSONArray("videos");
+                if (videosArray.length() == 0) {
+                    Toast.makeText(this, "Nenhum vídeo disponível", Toast.LENGTH_SHORT).show();
                     progressBar.setVisibility(View.GONE);
-                    tvUrl.setText("Erro ao acessar API");
+                    return;
                 }
-        );
+
+                // Monta a playlist
+                player = new ExoPlayer.Builder(this).build();
+                playerView.setPlayer(player);
+
+                for (int i = 0; i < videosArray.length(); i++) {
+                    JSONObject v = videosArray.getJSONObject(i);
+                    String videoFile = v.getString("url");
+                    String grupo = v.getString("grupo");
+
+                    String videoUrl = "http://" + ip_ws + "/api_reprodutor/videos/" + videoFile;
+                    MediaItem mediaItem = MediaItem.fromUri(Uri.parse(videoUrl));
+                    player.addMediaItem(mediaItem);
+
+                    // Conecta WebSocket apenas no primeiro vídeo
+                    if (i == 0) {
+                        connectWebSocket(videoUrl, grupo);
+                    }
+                }
+
+                // Configura loop contínuo
+                player.setRepeatMode(Player.REPEAT_MODE_ALL);
+                player.prepare();
+                player.setPlayWhenReady(true);
+
+                player.addListener(new Player.Listener() {
+                    @Override
+                    public void onPlaybackStateChanged(int state) {
+                        if (state == Player.STATE_READY) {
+                            progressBar.setVisibility(View.GONE);
+                        }
+                    }
+
+                    @Override
+                    public void onPlayerError(com.google.android.exoplayer2.PlaybackException error) {
+                        Log.e("ExoPlayer", "Erro no player: " + error.getMessage());
+                    }
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                progressBar.setVisibility(View.GONE);
+                tvUrl.setText("Erro ao processar JSON");
+            }
+        }, error -> {
+            error.printStackTrace();
+            progressBar.setVisibility(View.GONE);
+            tvUrl.setText("Erro ao acessar API");
+        });
+
         queue.add(request);
     }
 
@@ -352,4 +386,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void restartApp() {
+        Intent intent = getIntent();
+        finish();
+        startActivity(intent);
+    }
 }

@@ -46,4 +46,9 @@ dependencies {
     implementation libs.appcompat
     implementation libs.material
     implementation libs.activity
+
+    testImplementation libs.junit
+
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
 }
