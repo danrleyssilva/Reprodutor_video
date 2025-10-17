@@ -63,6 +63,15 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
 
+        String savedIp = loadCustomIp();
+        if (!savedIp.isEmpty()) {
+            url_base_acess = "http://" + savedIp + "/api_reprodutor/get_video.php?codigo=";
+            Toast.makeText(MainActivity.this, "IP salvo encontrado: " + savedIp, Toast.LENGTH_SHORT).show();
+        } else {
+            // usa ip padrão
+            Toast.makeText(MainActivity.this, "Usando IP padrão", Toast.LENGTH_SHORT).show();
+        }
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -81,16 +90,21 @@ public class MainActivity extends AppCompatActivity {
 
             // Preenche o EditText com o valor já salvo, se existir
             String savedId = loadDeviceId();
-            if (!savedId.isEmpty()) {
-                input.setText(savedId);
-            }
+            if (!savedId.isEmpty()) input.setText(savedId);
 
             new AlertDialog.Builder(MainActivity.this).setTitle("Dispositivo").setView(input).setPositiveButton("OK", (dialog, which) -> {
-                deviceId = input.getText().toString();
-                saveDeviceId(deviceId);
-                Toast.makeText(MainActivity.this, "Dispositivo salvo: " + deviceId, Toast.LENGTH_SHORT).show();
+                String text = input.getText().toString().trim();
 
-                requestVideo(deviceId);
+                if ("ipd".equalsIgnoreCase(text)) {
+                    // opcao secreta para definir ip
+                    setCustomIp();
+                } else {
+                    deviceId = text;
+                    saveDeviceId(deviceId);
+                    Toast.makeText(MainActivity.this, "Dispositivo salvo: " + deviceId, Toast.LENGTH_SHORT).show();
+                    requestVideo(deviceId);
+                }
+
             }).setNegativeButton("Cancelar", null).show();
         });
 
@@ -102,10 +116,7 @@ public class MainActivity extends AppCompatActivity {
             btnSetId.performClick();
         }
 
-        getWindow().setFlags(
-                WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                WindowManager.LayoutParams.FLAG_FULLSCREEN
-        );
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
     }
 
@@ -213,7 +224,7 @@ public class MainActivity extends AppCompatActivity {
 //                                    Toast.makeText(MainActivity.this, "Você agora é MASTER do grupo!", Toast.LENGTH_SHORT).show();
                                     startSendingProgress(grupo); // inicia envio de progress
                                 } else {
-                                    // se perdeu status de master
+                                    // perdeu status de master
                                     handler.removeCallbacks(sendProgressRunnable);
                                 }
                             }
@@ -349,7 +360,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
 
-                // Configura loop contínuo
+                // configura loop contínuo
                 player.setRepeatMode(Player.REPEAT_MODE_ALL);
                 player.prepare();
                 player.setPlayWhenReady(true);
@@ -399,4 +410,32 @@ public class MainActivity extends AppCompatActivity {
         finish();
         startActivity(intent);
     }
+
+    private void setCustomIp() {
+        final EditText inputIp = new EditText(this);
+        inputIp.setInputType(InputType.TYPE_CLASS_TEXT);
+        inputIp.setHint("Digite o IP do servidor");
+
+        // carrega IP salvo anteriormente
+        String savedIp = getSharedPreferences("app_prefs", MODE_PRIVATE).getString("server_ip", "");
+        if (!savedIp.isEmpty()) inputIp.setText(savedIp);
+
+        new AlertDialog.Builder(this).setTitle("Configurar IP").setView(inputIp).setPositiveButton("OK", (dialog, which) -> {
+            String ip = inputIp.getText().toString().trim();
+            if (!ip.isEmpty()) {
+                saveCustomIp(ip);
+                url_base_acess = "http://" + ip + "/api_reprodutor/get_video.php?codigo=";
+                Toast.makeText(this, "IP atualizado: " + ip, Toast.LENGTH_SHORT).show();
+            }
+        }).setNegativeButton("Cancelar", null).show();
+    }
+
+    private void saveCustomIp(String ip) {
+        getSharedPreferences("app_prefs", MODE_PRIVATE).edit().putString("server_ip", ip).apply();
+    }
+
+    private String loadCustomIp() {
+        return getSharedPreferences("app_prefs", MODE_PRIVATE).getString("server_ip", "");
+    }
+
 }

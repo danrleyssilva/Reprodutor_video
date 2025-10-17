@@ -35,7 +35,7 @@
             android:resizeableActivity="true"
             android:supportsPictureInPicture="false"
             android:exported="true"
-            android:screenOrientation="portrait">
+            android:screenOrientation="landscape">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
